@@ -19,6 +19,10 @@ func dataSourceNixBuild() *schema.Resource {
 				Type:     schema.TypeString,
 				Required: true,
 			},
+			"attribute": &schema.Schema{
+				Type:     schema.TypeString,
+				Required: true,
+			},
 			"store_path": &schema.Schema{
 				Type:     schema.TypeString,
 				Computed: true,
@@ -35,7 +39,9 @@ func dataNixBuildRead(d *schema.ResourceData, m interface{}) error {
 
 	expressionPath := d.Get("expression_path").(string)
 
-	storePath, err := nix.BuildExpression(nixPath, expressionPath, nil)
+	attribute := d.Get("attribute").(string)
+
+	storePath, err := nix.BuildExpression(nixPath, expressionPath, attribute, "")
 	if err != nil {
 		return err
 	}

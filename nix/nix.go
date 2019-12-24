@@ -25,7 +25,7 @@ func formatChildErr(err error) error {
 }
 
 // BuildExpression builds a nix expression, returning the store path.
-func BuildExpression(nixPath string, expressionPath string, outLink *string) (string, error) {
+func BuildExpression(nixPath string, expressionPath string, attribute string, outLink string) (string, error) {
 
 	tempDir, err := ioutil.TempDir("", "")
 	if err != nil {
@@ -35,11 +35,19 @@ func BuildExpression(nixPath string, expressionPath string, outLink *string) (st
 
 	var cmd *exec.Cmd
 
-	if outLink == nil {
-		cmd = exec.Command("nix-build", "--no-link", expressionPath)
+	args := []string{expressionPath}
+
+	if outLink == "" {
+		args = append(args, "--no-out-link")
 	} else {
-		cmd = exec.Command("nix-build", "-o", *outLink, expressionPath)
+		args = append(args, "--out-link", outLink)
 	}
+
+	if attribute != "" {
+		args = append(args, "-A", attribute)
+	}
+
+	cmd = exec.Command("nix-build", args...)
 
 	cmd.Env = []string{fmt.Sprintf("NIX_PATH=%s", nixPath)}
 
@@ -49,23 +57,23 @@ func BuildExpression(nixPath string, expressionPath string, outLink *string) (st
 		return "", fmt.Errorf("building expression failed: %s", formatChildErr(err))
 	}
 
-	if outLink == nil {
+	if outLink == "" {
 		return strings.TrimSpace(output.String()), nil
 	} else {
-		return os.Readlink(*outLink)
+		return os.Readlink(outLink)
 	}
 }
 
 // NixosRebuildConfig represents a configuration for Nixos rebuild.
 type NixosRebuildConfig struct {
-	TargetHost     string
-	TargetUser     string
-	BuildHost      string
-	NixosConfigPath    string
-	NixPath        string
-	SSHOpts        string
-	PreSwitchHook  string
-	PostSwitchHook string
+	TargetHost      string
+	TargetUser      string
+	BuildHost       string
+	NixosConfigPath string
+	NixPath         string
+	SSHOpts         string
+	PreSwitchHook   string
+	PostSwitchHook  string
 }
 
 // GetEnv returns an OS env suitable for nixos-rebuild.

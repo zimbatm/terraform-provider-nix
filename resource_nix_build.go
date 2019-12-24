@@ -20,6 +20,10 @@ func resourceNixBuild() *schema.Resource {
 		CustomizeDiff: resourceNixBuildCustomizeDiff,
 
 		Schema: map[string]*schema.Schema{
+			"attribute": &schema.Schema{
+				Type:     schema.TypeString,
+				Optional: true,
+			},
 			"expression": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
@@ -47,19 +51,20 @@ func resourceNixBuild() *schema.Resource {
 type nixBuildResourceConfig struct {
 	Expression     string
 	ExpressionPath string
+	Attribute      string
 	NixPath        string
 	OutLink        string
 }
 
 func (cfg *nixBuildResourceConfig) DoBuild() (string, error) {
-	return cfg.doBuild(&cfg.OutLink)
+	return cfg.doBuild(cfg.OutLink)
 }
 
 func (cfg *nixBuildResourceConfig) DoBuildNoLink() (string, error) {
-	return cfg.doBuild(nil)
+	return cfg.doBuild("")
 }
 
-func (cfg *nixBuildResourceConfig) doBuild(outLink *string) (string, error) {
+func (cfg *nixBuildResourceConfig) doBuild(outLink string) (string, error) {
 	if cfg.Expression != "" {
 		f, err := os.Create(cfg.ExpressionPath)
 		if err != nil {
@@ -75,7 +80,7 @@ func (cfg *nixBuildResourceConfig) doBuild(outLink *string) (string, error) {
 		}
 	}
 
-	return nix.BuildExpression(cfg.NixPath, cfg.ExpressionPath, outLink)
+	return nix.BuildExpression(cfg.NixPath, cfg.ExpressionPath, cfg.Attribute, outLink)
 }
 
 func getBuildConfig(d resourceLike) (nixBuildResourceConfig, error) {
@@ -85,13 +90,15 @@ func getBuildConfig(d resourceLike) (nixBuildResourceConfig, error) {
 		nixPath = p.(string)
 	}
 
-	expression, _ := d.GetOk("expression")
+	expression := d.Get("expression")
 
 	expressionPath := d.Get("expression_path").(string)
 	expressionPath, err := filepath.Abs(expressionPath)
 	if err != nil {
 		return nixBuildResourceConfig{}, err
 	}
+
+	attribute := d.Get("attribute")
 
 	outLink := d.Get("out_link").(string)
 	outLink, err = filepath.Abs(outLink)
@@ -103,6 +110,7 @@ func getBuildConfig(d resourceLike) (nixBuildResourceConfig, error) {
 		NixPath:        nixPath,
 		Expression:     expression.(string),
 		ExpressionPath: expressionPath,
+		Attribute:      attribute.(string),
 		OutLink:        outLink,
 	}, nil
 }
