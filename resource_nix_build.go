@@ -20,6 +20,10 @@ func resourceNixBuild() *schema.Resource {
 		CustomizeDiff: resourceNixBuildCustomizeDiff,
 
 		Schema: map[string]*schema.Schema{
+			"nix_path": &schema.Schema{
+				Type:     schema.TypeString,
+				Optional: true,
+			},
 			"attribute": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
@@ -32,17 +36,13 @@ func resourceNixBuild() *schema.Resource {
 				Type:     schema.TypeString,
 				Required: true,
 			},
-			"nix_path": &schema.Schema{
+			"out_link": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
 			},
 			"store_path": &schema.Schema{
 				Type:     schema.TypeString,
 				Computed: true,
-			},
-			"out_link": &schema.Schema{
-				Type:     schema.TypeString,
-				Required: true,
 			},
 		},
 	}
@@ -101,9 +101,11 @@ func getBuildConfig(d resourceLike) (nixBuildResourceConfig, error) {
 	attribute := d.Get("attribute")
 
 	outLink := d.Get("out_link").(string)
-	outLink, err = filepath.Abs(outLink)
-	if err != nil {
-		return nixBuildResourceConfig{}, err
+	if outLink != "" {
+		outLink, err = filepath.Abs(outLink)
+		if err != nil {
+			return nixBuildResourceConfig{}, err
+		}
 	}
 
 	return nixBuildResourceConfig{
@@ -129,9 +131,11 @@ func resourceNixBuildCreateUpdate(d *schema.ResourceData, m interface{}) error {
 
 	if d.HasChange("out_link") {
 		old, _ := d.GetChange("out_link")
-		err = os.Remove(old.(string))
-		if err != nil && !os.IsNotExist(err) {
-			return err
+		if old != "" {
+			err = os.Remove(old.(string))
+			if err != nil && !os.IsNotExist(err) {
+				return err
+			}
 		}
 	}
 
@@ -147,13 +151,17 @@ func resourceNixBuildCreateUpdate(d *schema.ResourceData, m interface{}) error {
 		}
 	}
 
-	linkExists := false
-	_, err = os.Readlink(cfg.OutLink)
-	if err == nil {
-		linkExists = true
+	linkMissing := true
+	if cfg.OutLink == "" {
+		linkMissing = false
+	} else {
+		_, err = os.Readlink(cfg.OutLink)
+		if err == nil {
+			linkMissing = false
+		}
 	}
 
-	if d.IsNewResource() || d.HasChange("store_path") || !linkExists {
+	if d.IsNewResource() || d.HasChange("store_path") || linkMissing {
 		_, err = cfg.DoBuild()
 		if err != nil {
 			return err
@@ -170,14 +178,16 @@ func resourceNixBuildRead(d *schema.ResourceData, m interface{}) error {
 		return err
 	}
 
-	storePath, err := os.Readlink(cfg.OutLink)
-	if err != nil {
-		return err
-	}
+	if cfg.OutLink != "" {
+		storePath, err := os.Readlink(cfg.OutLink)
+		if err != nil {
+			return err
+		}
 
-	err = d.Set("store_path", storePath)
-	if err != nil {
-		return err
+		err = d.Set("store_path", storePath)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -210,12 +220,14 @@ func resourceNixBuildExists(d *schema.ResourceData, m interface{}) (bool, error)
 		return false, err
 	}
 
-	_, err = os.Readlink(cfg.OutLink)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
+	if cfg.OutLink != "" {
+		_, err = os.Readlink(cfg.OutLink)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return false, nil
+			}
+			return false, err
 		}
-		return false, err
 	}
 
 	return true, nil
